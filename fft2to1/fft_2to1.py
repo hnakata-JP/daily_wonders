@@ -9,10 +9,12 @@ from scipy.optimize import least_squares
 import cv2
 
 def load_image(image_path):
+    # load an image by the scaling of RGB[A] to Gray:Y←0.299⋅R+0.587⋅G+0.114⋅B
+    # Ref: https://docs.opencv.org/4.2.0/de/d25/imgproc_color_conversions.html#color_convert_rgb_gray
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     return image
 
-def computer_radial_profile(image):
+def calc_radial_profile(image):
     # Perform 2D FFT
     fft_image = np.fft.fft2(image)
     fft_shifted = np.fft.fftshift(fft_image)
@@ -23,25 +25,48 @@ def computer_radial_profile(image):
     mid_row, mid_col = rows // 2, cols // 2
 
     # Compute max radius and frequency, and initialize radial profile and count
-    max_radius = int(np.ceil(np.sqrt(mid_row**2 + mid_col**2)))
-    frequency = np.arange(max_radius)
-    radial_profile = np.zeros(max_radius)
-    count = np.zeros(max_radius)
+    max_r = int(np.ceil(np.sqrt(mid_row**2 + mid_col**2)))
+    max_x = int(np.ceil(mid_row))
+    max_y = int(np.ceil(mid_col))
+    freq_r = np.arange(max_r)
+    freq_x = np.arange(max_x)
+    freq_y = np.arange(max_y)
+    rprof = np.zeros(max_r)
+    xprof = np.zeros(max_x)
+    yprof = np.zeros(max_y)
+    countr = np.zeros(max_r)
+    countx = np.zeros(max_x)
+    county = np.zeros(max_y)
 
+    ### Compute the radial profile ###
     # Create coordinate grid
     y, x = np.indices((rows, cols))
     r = np.round(np.sqrt((y - mid_row) ** 2 + (x - mid_col) ** 2)).astype(int)
-    r = np.minimum(r, max_radius - 1)  # Ensure r does not exceed max_radius - 1
+    r = np.minimum(r, max_r - 1)  # Ensure r does not exceed max_radius - 1
 
     # Bin the values using numpy's efficient indexing
-    np.add.at(radial_profile, r, magnitude_spectrum)
-    np.add.at(count, r, 1)
+    np.add.at(rprof, r, magnitude_spectrum)
+    np.add.at(countr, r, 1)
 
     # Avoid division by zero and compute the average
-    count[count == 0] = 1
-    radial_profile /= count
+    countr[countr == 0] = 1
+    rprof /= countr
 
-    return frequency, radial_profile
+    ### Compute kx and ky profiles ###
+    kx = np.round(np.sqrt((x - mid_col) ** 2)).astype(int)
+    ky = np.round(np.sqrt((y - mid_row) ** 2)).astype(int)
+    kx = np.minimum(kx, max_x - 1)  # Ensure kx does not exceed max_x - 1
+    ky = np.minimum(ky, max_y - 1)  # Ensure ky does not exceed max_y - 1
+    np.add.at(xprof, kx, magnitude_spectrum)
+    np.add.at(countx, kx, 1)
+    np.add.at(yprof, ky, magnitude_spectrum)
+    np.add.at(county, ky, 1)
+    countx[countx == 0] = 1
+    county[county == 0] = 1
+    xprof /= countx
+    yprof /= county
+
+    return (freq_r, rprof), (freq_x, xprof), (freq_y, yprof)
 
 
 def binning_data(x, y, bin_size=5, is_log=True):
