@@ -26,17 +26,9 @@ def calc_radial_profile(image):
 
     # Compute max radius and frequency, and initialize radial profile and count
     max_r = int(np.ceil(np.sqrt(mid_row**2 + mid_col**2)))
-    max_x = int(np.ceil(mid_row))
-    max_y = int(np.ceil(mid_col))
     freq_r = np.arange(max_r)
-    freq_x = np.arange(max_x)
-    freq_y = np.arange(max_y)
     rprof = np.zeros(max_r)
-    xprof = np.zeros(max_x)
-    yprof = np.zeros(max_y)
     countr = np.zeros(max_r)
-    countx = np.zeros(max_x)
-    county = np.zeros(max_y)
 
     ### Compute the radial profile ###
     # Create coordinate grid
@@ -52,21 +44,7 @@ def calc_radial_profile(image):
     countr[countr == 0] = 1
     rprof /= countr
 
-    ### Compute kx and ky profiles ###
-    kx = np.round(np.sqrt((x - mid_col) ** 2)).astype(int)
-    ky = np.round(np.sqrt((y - mid_row) ** 2)).astype(int)
-    kx = np.minimum(kx, max_x - 1)  # Ensure kx does not exceed max_x - 1
-    ky = np.minimum(ky, max_y - 1)  # Ensure ky does not exceed max_y - 1
-    np.add.at(xprof, kx, magnitude_spectrum)
-    np.add.at(countx, kx, 1)
-    np.add.at(yprof, ky, magnitude_spectrum)
-    np.add.at(county, ky, 1)
-    countx[countx == 0] = 1
-    county[county == 0] = 1
-    xprof /= countx
-    yprof /= county
-
-    return (freq_r, rprof), (freq_x, xprof), (freq_y, yprof)
+    return fft_shifted, freq_r, rprof
 
 
 def binning_data(x, y, bin_size=5, is_log=True):
@@ -118,16 +96,17 @@ def plot_pix_scale(x, y, yerr, params, errors, chi2, dof, fmin, fmax, ax=None):
     """
     if ax is None:
         ax = plt.gca()
-    ax.errorbar(10**x, 10**y, yerr=10**yerr, fmt='o', markersize=3, color='black', label='data')
+    ax.errorbar(10**x, 10**y, yerr=10**yerr, fmt='o', markersize=2, alpha=0.1, color='black', label='data')
     ax.axvspan(10**x[fmin], 10**x[fmax], color='gray', alpha=0.03)
-    ax.plot(10**x, 10**power_law(params, x), 'r-', lw=2, label=f"fit result:\n10^"+ \
+    ax.plot(10**x[:fmax], 10**power_law(params, x[:fmax]), 'r-', lw=2, label=f"fit result:\n10^"+ \
         fr"[{params[0]:.2f} ($\pm${errors[0]:.2f}) f + {params[1]:.2f} ($\pm${errors[1]:.2f})]"+'\n'+fr"$\chi^2$ / DOF = {chi2:.2f} / {dof:.0f}")
     ax.grid(lw=0.2)
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('Frequency[/pix]')
-    ax.set_ylabel('Magnitude')
-    ax.legend()
+    ax.set_ylabel(r'Magnitude $|\mathcal{F}(A)|$')
+    ax.legend(fontsize=8)
+    ax.axis('equal')
     return ax
 
 def main():
@@ -144,7 +123,7 @@ def main():
     image = load_image(args.filepath)
 
     # compute radial profile
-    frequency, radial_profile = computer_radial_profile(image)
+    fft_image, frequency, radial_profile = calc_radial_profile(image)
 
     # binning data
     fbin, rbin, err = binning_data(frequency, radial_profile, bin_size=5)
@@ -154,7 +133,7 @@ def main():
 
     # plot data
     fig, ax = plt.subplots(figsize=(8, 6))
-    _=plot_pix_scale(fbin, rbin, params, errors, chi2, dof, fmin, fmax, ax=ax)
+    _=plot_pix_scale(fbin, rbin, err, params, errors, chi2, dof, fmin, fmax, ax=ax)
     plt.show()
 
 if __name__ == '__main__':
