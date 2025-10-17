@@ -10,11 +10,13 @@ from zoneinfo import ZoneInfo
 import slack_sdk
 import emoji
 import MeCab
-_mecab_path = "-r /dev/null -d /opt/homebrew/lib/mecab/dic/ipadic-neologd"
+# mecab_path example
+# _mecab_path = "-r /dev/null -d /opt/homebrew/lib/mecab/dic/ipadic-neologd"
 
 ### how to get requests ###
 # client = slack_sdk.WebClient(token={your token})
-# request = client.conversations_history(channel={your target channel}, limit=999)
+# request = client.conversations_history(channel={your target channel}, limit=999,
+#                                        oldest={start ts}, latest={stop ts})
 
 def print_channel_ids(client, token):
     _list = client.conversations_list(token=token)
@@ -23,18 +25,18 @@ def print_channel_ids(client, token):
 
 def get_real_name(client, token):
     # recognize all members by id
-    real_names = {}
+    user_name = {}
     all_members = client.users_list(token=token)['members']
     for _u in all_members:
         if (_u['name'] != 'slackbot') & _u['deleted'] == False:
-            real_names[_u['id']] = _u['real_name']
+            user_name[_u['id']] = _u['real_name']
         else:
             pass
-    return real_names
+    return user_name
 
 # main Morphological Analysis tools
 # joint all messages with the given range
-def joint_messages_with_range(request, start=None, stop=None):
+def joint_messages_with_range(request, start=None, stop=None, sep=","):
     if start is None:
         start = datetime(1970, 1, 1, 0, 0, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
     if stop is None:
@@ -58,11 +60,11 @@ def joint_messages_with_range(request, start=None, stop=None):
                                 pass
             else:
                 pass
-    return ",".join(messages)
+    return sep.join(messages)
 
 # tokenize text
-def tokenize_with_pos(text):
-    mecab = MeCab.Tagger(_mecab_path)
+def tokenize_with_pos(text, mecab_path):
+    mecab = MeCab.Tagger(mecab_path)
     nodes = mecab.parseToNode(text)
     tokens = []
     while nodes:
@@ -101,7 +103,7 @@ def reduce_tokens(tokens_with_pos, part_of_speech, is_special_part=False):
     return df
 
 # addtional tools for emoji
-def get_emoji_data(request, real_names):
+def get_emoji_data(request, user_name):
     # dump all messages and reactions
     ts = []
     user = []
@@ -110,7 +112,7 @@ def get_emoji_data(request, real_names):
     reactions = []
     for _m in request['messages']:
         ts.append(_m['ts'])
-        user.append(real_names[_m['user']])
+        user.append(user_name[_m['user']])
         if 'blocks' in _m:
             for _b in _m['blocks']:
                 if 'elements' in _b:
@@ -139,10 +141,10 @@ def get_emoji_data(request, real_names):
                 if len(_r['users']) > 1:
                     for _r2 in _r['users']:
                         _reac.append(_r['name'])
-                        _ruser.append(real_names[_r2])
+                        _ruser.append(user_name[_r2])
                 else:
                     _reac.append(_r['name'])
-                    _ruser.append(real_names[_r['users'][0]])
+                    _ruser.append(user_name[_r['users'][0]])
             _reacs = ",".join(_reac)
             reactions.append(_reacs)
             _rusers = ",".join(_ruser)
